@@ -1,16 +1,15 @@
-require("dotenv").config(); // Load environment variables
-
+require("dotenv").config();
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
 const mongoose = require("mongoose");
 
-// Initialize express server
+// Express and server setup
 const app = express();
 const server = http.createServer(app);
 
-// Enable CORS with proper settings
+// CORS configuration
 const allowedOrigins = ["https://game-hub-wheat-beta.vercel.app"];
 app.use(
   cors({
@@ -18,129 +17,117 @@ app.use(
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
-        callback(new Error("CORS error: Origin not allowed"));
+        callback(new Error("CORS error"));
       }
     },
     credentials: true,
   })
 );
 
-// MongoDB connection
-mongoose
-  .connect(process.env.MONGO_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  })
-  .then(() => console.log("Connected to MongoDB"))
-  .catch((error) => console.log("MongoDB connection error:", error));
+// Database connection
+mongoose.connect(
+  process.env.MONGO_URI,
+  { useNewUrlParser: true, useUnifiedTopology: true }
+);
 
-// Initialize Socket.IO
+// Socket.IO server
 const io = new Server(server, {
   cors: {
-    origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error("CORS error: Origin not allowed"));
-      }
-    },
+    origin: allowedOrigins,
     methods: ["GET", "POST"],
     credentials: true,
   },
 });
 
-// MongoDB Schema for room/session persistence
 const GameSessionSchema = new mongoose.Schema({
   roomCode: String,
-  players: [String], // Array of Socket IDs
+  players: [String],
   scores: { player1: { type: Number, default: 0 }, player2: { type: Number, default: 0 } },
   currentRound: { type: Number, default: 1 },
-  createdAt: { type: Date, default: Date.now },
   choices: {},
 });
 
 const GameSession = mongoose.model("GameSession", GameSessionSchema);
 
-// Function to generate a room code
-const generateRoomCode = () => {
-  return Math.random().toString(36).substring(2, 8).toUpperCase(); // Example: ABC123
+const generateRoomCode = () => Math.random().toString(36).substring(2, 8).toUpperCase();
+
+const determineWinner = (choice1, choice2) => {
+  if (choice1 === choice2) return "tie";
+  if (
+    (choice1 === "rock" && choice2 === "scissors") ||
+    (choice1 === "paper" && choice2 === "rock") ||
+    (choice1 === "scissors" && choice2 === "paper")
+  ) {
+    return "player1";
+  }
+  return "player2";
 };
 
-// Socket connection logic
 io.on("connection", (socket) => {
-  console.log("New client connected:", socket.id);
+  console.log("Client connected:", socket.id);
 
-  // Create a room for friends
-  socket.on("create_room_for_friends", async () => {
-    const roomCode = generateRoomCode();
-    const newSession = new GameSession({
-      roomCode,
-      players: [socket.id],
-    });
+  // Handle session creation or joining
+  socket.on("join_or_create_room", async () => {
+    let session = await GameSession.findOne({ players: { $size: 1 } });
 
-    await newSession.save();
-    socket.join(roomCode);
-
-    socket.emit("room_created", roomCode);
-    console.log(`Room created: ${roomCode}`);
-  });
-
-  // Join an existing room
-  socket.on("join_room", async (roomCode) => {
-    const session = await GameSession.findOne({ roomCode });
-
-    if (session && session.players.length < 2) {
+    if (session) {
       session.players.push(socket.id);
       await session.save();
-
-      socket.join(roomCode);
-      socket.emit("room_joined", roomCode);
-      io.to(roomCode).emit("start_game");
-      console.log(`Player joined room: ${roomCode}`);
+      socket.emit("room_joined", session.roomCode);
     } else {
-      socket.emit("error_message", "Room is full or doesn't exist");
+      const roomCode = generateRoomCode();
+      const newSession = new GameSession({
+        roomCode,
+        players: [socket.id],
+      });
+      await newSession.save();
+      socket.emit("room_created", roomCode);
     }
   });
 
-  // Handle making choices
+  // Handle choice logic for round results
   socket.on("make_choice", async ({ choice, roomCode }) => {
-    const gameSession = await GameSession.findOne({ roomCode });
+    const session = await GameSession.findOne({ roomCode });
 
-    if (gameSession) {
-      gameSession.choices[socket.id] = choice;
+    if (session) {
+      session.choices = session.choices || {};
+      session.choices[socket.id] = choice;
 
-      if (Object.keys(gameSession.choices).length === 2) {
-        // Both players made choices, compute result
+      // If both players have made their choices, process the round
+      if (Object.keys(session.choices).length === 2) {
         const [player1Choice, player2Choice] = [
-          gameSession.choices[gameSession.players[0]],
-          gameSession.choices[gameSession.players[1]],
+          session.choices[session.players[0]],
+          session.choices[session.players[1]],
         ];
+
         const result = determineWinner(player1Choice, player2Choice);
 
         if (result === "player1") {
-          gameSession.scores.player1++;
+          session.scores.player1++;
         } else if (result === "player2") {
-          gameSession.scores.player2++;
+          session.scores.player2++;
         }
 
-        await gameSession.save();
+        session.currentRound++;
+
         io.to(roomCode).emit("round_result", {
           result,
-          scores: gameSession.scores,
+          scores: session.scores,
+          choices: { player1Choice, player2Choice },
         });
 
-        // Reset choices for next round
-        gameSession.choices = {};
-        gameSession.currentRound++;
-        await gameSession.save();
+        session.choices = {};
 
-        // End game after 3 rounds
-        if (gameSession.currentRound > 3) {
+        // End the game after 3 rounds
+        if (session.currentRound > 3) {
           io.to(roomCode).emit("game_over", {
-            scores: gameSession.scores,
+            scores: session.scores,
           });
+
           await GameSession.deleteOne({ roomCode });
         }
+
+        await session.save();
       }
     }
   });
@@ -163,19 +150,4 @@ io.on("connection", (socket) => {
   });
 });
 
-// Helper function to determine the winner
-const determineWinner = (choice1, choice2) => {
-  if (choice1 === choice2) return "tie";
-  if (
-    (choice1 === "rock" && choice2 === "scissors") ||
-    (choice1 === "paper" && choice2 === "rock") ||
-    (choice1 === "scissors" && choice2 === "paper")
-  ) {
-    return "player1";
-  }
-  return "player2";
-};
-
-// Start the server
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+server.listen(3000, () => console.log("Server running on port 3000"));
