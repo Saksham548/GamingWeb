@@ -51,29 +51,20 @@ const GameSession = mongoose.model("GameSession", GameSessionSchema);
 
 const generateRoomCode = () => Math.random().toString(36).substring(2, 8).toUpperCase();
 
-const determineWinner = (choice1, choice2) => {
-  if (choice1 === choice2) return "tie";
-  if (
-    (choice1 === "rock" && choice2 === "scissors") ||
-    (choice1 === "paper" && choice2 === "rock") ||
-    (choice1 === "scissors" && choice2 === "paper")
-  ) {
-    return "player1";
-  }
-  return "player2";
-};
-
 io.on("connection", (socket) => {
-  console.log("Client connected:", socket.id);
+  console.log("New connection established:", socket.id);
 
-  // Handle session creation or joining
+  // Handle creating a new or joining an existing game session
   socket.on("join_or_create_room", async () => {
+    console.log("Joining or creating room...");
     let session = await GameSession.findOne({ players: { $size: 1 } });
 
     if (session) {
       session.players.push(socket.id);
       await session.save();
+      socket.join(session.roomCode);
       socket.emit("room_joined", session.roomCode);
+      io.to(session.roomCode).emit("toast_message", { type: "success", message: `Joined session: ${session.roomCode}` });
     } else {
       const roomCode = generateRoomCode();
       const newSession = new GameSession({
@@ -81,58 +72,29 @@ io.on("connection", (socket) => {
         players: [socket.id],
       });
       await newSession.save();
+      socket.join(roomCode);
       socket.emit("room_created", roomCode);
+      io.to(roomCode).emit("toast_message", { type: "success", message: `Room created with code: ${roomCode}` });
     }
   });
 
-  // Handle choice logic for round results
-  socket.on("make_choice", async ({ choice, roomCode }) => {
+  // Handle joining a specific room
+  socket.on("join_room", async (roomCode) => {
     const session = await GameSession.findOne({ roomCode });
 
-    if (session) {
-      session.choices = session.choices || {};
-      session.choices[socket.id] = choice;
-
-      // If both players have made their choices, process the round
-      if (Object.keys(session.choices).length === 2) {
-        const [player1Choice, player2Choice] = [
-          session.choices[session.players[0]],
-          session.choices[session.players[1]],
-        ];
-
-        const result = determineWinner(player1Choice, player2Choice);
-
-        if (result === "player1") {
-          session.scores.player1++;
-        } else if (result === "player2") {
-          session.scores.player2++;
-        }
-
-        session.currentRound++;
-
-        io.to(roomCode).emit("round_result", {
-          result,
-          scores: session.scores,
-          choices: { player1Choice, player2Choice },
-        });
-
-        session.choices = {};
-
-        // End the game after 3 rounds
-        if (session.currentRound > 3) {
-          io.to(roomCode).emit("game_over", {
-            scores: session.scores,
-          });
-
-          await GameSession.deleteOne({ roomCode });
-        }
-
-        await session.save();
-      }
+    if (session && session.players.length < 2) {
+      session.players.push(socket.id);
+      await session.save();
+      socket.join(roomCode);
+      socket.emit("room_joined", roomCode);
+      io.to(roomCode).emit("toast_message", { type: "success", message: `Joined room with code: ${roomCode}` });
+    } else {
+      console.log("Join failed.");
+      socket.emit("error_message", "Cannot join room. Either it does not exist or is already full.");
+      io.to(socket.id).emit("toast_message", { type: "error", message: "Join failed. Room is full or invalid." });
     }
   });
 
-  // Handle disconnect
   socket.on("disconnect", async () => {
     console.log("Client disconnected:", socket.id);
 
