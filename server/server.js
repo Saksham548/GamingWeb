@@ -2,91 +2,145 @@ const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
+const mongoose = require("mongoose");
+
+// MongoDB setup
+mongoose.connect("mongodb+srv://<username>:<password>@cluster.mongodb.net/rpsGame", {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+});
+
+const RoomSchema = new mongoose.Schema({
+  code: String,
+  players: [String], // Player Socket IDs
+  choices: Object, // Player choices (key: socket ID, value: choice)
+  status: String, // 'waiting', 'active', 'finished'
+});
+
+const Room = mongoose.model("Room", RoomSchema);
 
 const app = express();
 const server = http.createServer(app);
 
-// CORS configuration
-const corsOptions = {
-  origin: "http://192.168.29.106:5173", // Allow this specific frontend origin
+app.use(cors({
+  origin: "*", // Replace with frontend URL during production
   methods: ["GET", "POST"],
-  credentials: true,
-};
-
-app.use(cors(corsOptions));
+}));
 
 const io = new Server(server, {
   cors: {
-    origin: "http://192.168.29.106:5173",
+    origin: "*", // Replace with frontend URL during production
     methods: ["GET", "POST"],
-    credentials: true,
   },
 });
 
-const games = {}; // Store game sessions
-
-// Generate a unique room code
-const generateRoomCode = () => {
-  return Math.random().toString(36).substring(2, 8).toUpperCase(); // Example: ABC123
-};
+const generateRoomCode = () => Math.random().toString(36).substring(2, 8).toUpperCase();
 
 io.on("connection", (socket) => {
-  console.log("New client connected");
+  console.log("New client connected:", socket.id);
 
-  // Create a new game room
-  socket.on("create_room", () => {
+  // Create a friends-only session
+  socket.on("create_room", async () => {
     const roomCode = generateRoomCode();
-    games[roomCode] = { players: [], choices: {} };
+    const room = new Room({
+      code: roomCode,
+      players: [socket.id],
+      choices: {},
+      status: "waiting",
+    });
 
-    socket.emit("room_created", roomCode); // Emit the room code to the player
-    console.log(`Room created with code: ${roomCode}`);
+    await room.save();
+    socket.join(roomCode);
+    socket.emit("room_created", roomCode);
+    console.log(`Room created: ${roomCode}`);
   });
 
-  // Join an existing game room
-  socket.on("join_room", (roomCode) => {
-    if (games[roomCode]) {
-      const game = games[roomCode];
-      if (game.players.length < 2) {
-        game.players.push(socket.id);
+  // Join a friends-only session
+  socket.on("join_room", async (roomCode) => {
+    const room = await Room.findOne({ code: roomCode });
+
+    if (room) {
+      if (room.players.length < 2) {
+        room.players.push(socket.id);
+        room.status = "active";
+        await room.save();
+
         socket.join(roomCode);
-        socket.emit("room_joined", roomCode); // Notify the player they joined
-        console.log(`Player joined room: ${roomCode}`);
-        if (game.players.length === 2) {
-          io.to(roomCode).emit("game_start"); // Start game if both players joined
-        }
+        socket.emit("room_joined", roomCode);
+        io.to(roomCode).emit("game_start", roomCode);
+        console.log(`Player ${socket.id} joined room: ${roomCode}`);
       } else {
-        socket.emit("error_message", "Game room is full");
+        socket.emit("error_message", "Room is full");
       }
     } else {
       socket.emit("error_message", "Room does not exist");
     }
   });
 
-  // Handle player choices
-  socket.on("make_choice", ({ choice, roomCode }) => {
-    const game = games[roomCode];
-    if (game) {
-      game.choices[socket.id] = choice;
+  // Join a global session
+  socket.on("join_global", async () => {
+    let room = await Room.findOne({ status: "waiting" });
 
-      // Check if both players have made their choices
-      if (Object.keys(game.choices).length === 2) {
-        const [player1, player2] = game.players;
-        const result = determineWinner(
-          game.choices[player1],
-          game.choices[player2]
-        );
+    if (!room) {
+      // Create a new room if no waiting room exists
+      const roomCode = generateRoomCode();
+      room = new Room({
+        code: roomCode,
+        players: [socket.id],
+        choices: {},
+        status: "waiting",
+      });
+      await room.save();
+      socket.join(roomCode);
+      socket.emit("room_created", roomCode);
+    } else {
+      // Join an existing waiting room
+      room.players.push(socket.id);
+      room.status = "active";
+      await room.save();
+
+      socket.join(room.code);
+      io.to(room.code).emit("game_start", room.code);
+    }
+  });
+
+  // Handle player choices
+  socket.on("make_choice", async ({ roomCode, choice }) => {
+    const room = await Room.findOne({ code: roomCode });
+
+    if (room) {
+      room.choices[socket.id] = choice;
+
+      if (Object.keys(room.choices).length === 2) {
+        const [player1, player2] = room.players;
+        const result = determineWinner(room.choices[player1], room.choices[player2]);
+
         io.to(roomCode).emit("round_result", {
-          playerChoices: game.choices,
+          choices: room.choices,
           result,
         });
-        game.choices = {}; // Reset for the next round
+
+        room.choices = {}; // Reset choices for the next round
+        await room.save();
       }
     }
   });
 
-  socket.on("disconnect", () => {
-    console.log("Client disconnected");
-    // Handle disconnection logic (cleanup if necessary)
+  socket.on("disconnect", async () => {
+    console.log("Client disconnected:", socket.id);
+
+    // Remove player from room and cleanup if necessary
+    const room = await Room.findOne({ players: socket.id });
+
+    if (room) {
+      room.players = room.players.filter((id) => id !== socket.id);
+      if (room.players.length === 0) {
+        await Room.deleteOne({ code: room.code });
+      } else {
+        room.status = "waiting";
+        await room.save();
+      }
+    }
   });
 
   function determineWinner(choice1, choice2) {
@@ -103,6 +157,6 @@ io.on("connection", (socket) => {
 });
 
 const PORT = 3000;
-server.listen(PORT, "0.0.0.0", () => {
-  console.log(`Server running on http://192.168.29.106:${PORT}`);
+server.listen(PORT, () => {
+  console.log(`Server is running on http://localhost:${PORT}`);
 });

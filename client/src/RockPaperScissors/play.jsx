@@ -12,7 +12,7 @@ const Play = ({ gameMode }) => {
 
   // Connect to the backend
   useEffect(() => {
-    const newSocket = io("http://192.168.29.106:3000", { withCredentials: true });
+    const newSocket = io("https://your-backend-url.com", { withCredentials: true }); // Update to deployed backend URL
     setSocket(newSocket);
 
     newSocket.on("connect", () => {
@@ -31,13 +31,19 @@ const Play = ({ gameMode }) => {
       toast.success("Joined room successfully!");
     });
 
-    newSocket.on("start_game", () => {
+    newSocket.on("game_start", () => {
       toast.success("Game started!");
     });
 
     newSocket.on("round_result", (data) => {
       setOpponentChoice(data.opponentChoice);
-      setWinner(data.result === "win" ? "You win!" : data.result === "lose" ? "You lose!" : "It's a tie!");
+      setWinner(
+        data.result === "win"
+          ? "You win!"
+          : data.result === "lose"
+          ? "You lose!"
+          : "It's a tie!"
+      );
     });
 
     newSocket.on("error_message", (message) => {
@@ -65,9 +71,9 @@ const Play = ({ gameMode }) => {
     if (socket) {
       setLoading(true); // Show loading spinner
       if (gameMode === "new_game") {
-        socket.emit("join_or_create_room");
+        socket.emit("join_or_create_room"); // Global multiplayer session
       } else if (gameMode === "play_with_friends") {
-        socket.emit("create_room_for_friends");
+        socket.emit("create_room_for_friends"); // Friends-only session
       }
     }
   };
