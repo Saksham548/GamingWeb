@@ -12,7 +12,7 @@ const Play = ({ gameMode, onBackToMainMenu }) => {
   const [score, setScore] = useState({ player1: 0, player2: 0 }); // Added state for score tracking
 
   useEffect(() => {
-    const newSocket = io("http://your-backend-url.com", { withCredentials: true });
+    const newSocket = io("https://gamehub-uoab.onrender.com", { withCredentials: true });
     setSocket(newSocket);
 
     newSocket.on("connect", () => console.log("Socket connected"));
