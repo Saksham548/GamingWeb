@@ -8,5 +8,4 @@ export default defineConfig({
     port: 5173, // Optional: Specify port
   },
   plugins: [react()],
-  base: "/vite-react-deploy",
 });

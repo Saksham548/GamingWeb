@@ -10,9 +10,10 @@ const Header = ({ score }) => {
           <span>Scissors</span>
         </div>
         <div className="bg-white flex 
-        flex-col py-3 px-10 rounded-[5px] text-blue-700 font-semibold">
-          <span>Player 1 Score: {score.player1}</span>
-          <span>Player 2 Score: {score.player2}</span>
+        flex-col py-3 px-10 rounded-[5px] text-blue-700 font-semibold text-center">
+          <span >Score  </span>
+          <span>Player 1 : {score.player1}</span>
+          <span>Player 2 : {score.player2}</span>
         </div>
       </div>
     </>

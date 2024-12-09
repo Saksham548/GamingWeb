@@ -1,3 +1,4 @@
+require("dotenv").config(); // Load .env file variables
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
@@ -9,11 +10,11 @@ const app = express();
 const server = http.createServer(app);
 
 // Enable CORS
-app.use(cors({ origin: "http://your-frontend-url.com", credentials: true }));
+app.use(cors({ origin: process.env.FRONTEND_URL, credentials: true }));
 
 // MongoDB connection
 mongoose
-  .connect("mongodb+srv://Saksham1242:Saksham548@gamehub.kzg0z.mongodb.net/", {
+  .connect(process.env.MONGO_URI, {
     useNewUrlParser: true,
     useUnifiedTopology: true,
   })
@@ -23,7 +24,7 @@ mongoose
 // Initialize Socket.io
 const io = new Server(server, {
   cors: {
-    origin: "http://your-frontend-url.com",
+    origin: process.env.FRONTEND_URL,
     methods: ["GET", "POST"],
     credentials: true,
   },
@@ -148,4 +149,6 @@ const determineWinner = (choice1, choice2) => {
   return "player2";
 };
 
-server.listen(3000, () => console.log("Server running on port 3000"));
+// Start the server
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
