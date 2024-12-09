@@ -8,6 +8,7 @@ const Play = ({ onBackToMainMenu }) => {
   const [winner, setWinner] = useState("");
   const [loading, setLoading] = useState(false);
   const [roomCode, setRoomCode] = useState("");
+  const [customRoomCode, setCustomRoomCode] = useState(""); // For entering custom room code
   const [socket, setSocket] = useState(null);
   const [score, setScore] = useState({ player1: 0, player2: 0 });
 
@@ -92,6 +93,15 @@ const Play = ({ onBackToMainMenu }) => {
     }
   };
 
+  const handleCustomRoomJoin = () => {
+    if (socket && customRoomCode) {
+      setLoading(true);
+      socket.emit("join_room", customRoomCode);
+    } else {
+      toast.error("Enter a valid room code.");
+    }
+  };
+
   return (
     <div className="text-center p-6">
       <Toaster />
@@ -155,6 +165,23 @@ const Play = ({ onBackToMainMenu }) => {
               onClick={createRoomForFriends}
             >
               Create Room for Friends
+            </button>
+          </div>
+
+          {/* Custom Room Code Input */}
+          <div className="mt-4">
+            <input
+              type="text"
+              className="border p-2"
+              placeholder="Enter Room Code"
+              value={customRoomCode}
+              onChange={(e) => setCustomRoomCode(e.target.value)}
+            />
+            <button
+              className="ml-2 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+              onClick={handleCustomRoomJoin}
+            >
+              Join Room
             </button>
           </div>
         </div>
