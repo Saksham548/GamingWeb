@@ -5,7 +5,7 @@ const cors = require("cors");
 const mongoose = require("mongoose");
 
 // MongoDB setup
-mongoose.connect("mongodb+srv://<username>:<password>@cluster.mongodb.net/rpsGame", {
+mongoose.connect("mongodb+srv://Saksham1242:Saksham548@gamehub.kzg0z.mongodb.net/", {
   useNewUrlParser: true,
   useUnifiedTopology: true,
 });

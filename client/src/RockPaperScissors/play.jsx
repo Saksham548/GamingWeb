@@ -1,18 +1,17 @@
 import React, { useState, useEffect } from "react";
 import io from "socket.io-client";
 import { Toaster, toast } from "react-hot-toast";
-
-const Play = ({ gameMode }) => {
+import Header from "./header";
+const Play = ({ gameMode, onBackToMainMenu }) => {
   const [playerChoice, setPlayerChoice] = useState(null);
   const [opponentChoice, setOpponentChoice] = useState(null);
   const [winner, setWinner] = useState("");
   const [roomCode, setRoomCode] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [socket, setSocket] = useState(null);
 
-  // Connect to the backend
   useEffect(() => {
-    const newSocket = io("https://your-backend-url.com", { withCredentials: true }); // Update to deployed backend URL
+    const newSocket = io("http://your-backend-url.com", { withCredentials: true }); // Replace with deployed backend URL
     setSocket(newSocket);
 
     newSocket.on("connect", () => {
@@ -58,7 +57,41 @@ const Play = ({ gameMode }) => {
     return () => newSocket.disconnect();
   }, []);
 
-  // Handle player choice
+  const joinOrCreateRoom = () => {
+    if (socket) {
+      setLoading(true);
+      if (gameMode === "new_game") {
+        socket.emit("join_or_create_room", {}, (response) => {
+          if (response.success) {
+            toast.success(response.message);
+            setRoomCode(response.roomCode);
+            setLoading(false);
+          } else {
+            toast.error(response.message);
+            setLoading(false);
+          }
+        });
+      } else if (gameMode === "play_with_friends") {
+        socket.emit("create_room_for_friends", {}, (response) => {
+          if (response.success) {
+            toast.success(`Room created! Code: ${response.roomCode}`);
+            setRoomCode(response.roomCode);
+            setLoading(false);
+          } else {
+            toast.error(response.message);
+            setLoading(false);
+          }
+        });
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (gameMode) {
+      joinOrCreateRoom();
+    }
+  }, [gameMode]);
+
   const handleChoice = (choice) => {
     setPlayerChoice(choice);
     if (socket && roomCode) {
@@ -66,56 +99,46 @@ const Play = ({ gameMode }) => {
     }
   };
 
-  // Handle game mode logic
-  const joinOrCreateRoom = () => {
-    if (socket) {
-      setLoading(true); // Show loading spinner
-      if (gameMode === "new_game") {
-        socket.emit("join_or_create_room"); // Global multiplayer session
-      } else if (gameMode === "play_with_friends") {
-        socket.emit("create_room_for_friends"); // Friends-only session
-      }
-    }
-  };
-
-  // Trigger room creation or joining based on game mode
-  useEffect(() => {
-    if (gameMode) {
-      joinOrCreateRoom();
-    }
-  }, [gameMode]);
-
   return (
+    <>
+      <Header/>
     <div className="text-center">
       <Toaster />
-      <h2 className="text-2xl font-bold mb-4">Rock Paper Scissors</h2>
       {loading ? (
         <div>Loading...</div>
+      ) : roomCode ? (
+        <>
+          <div className="mb-4">
+            <p className="font-bold">Room Code: {roomCode}</p>
+          </div>
+          <div className="flex justify-center space-x-4">
+            <button className="btn" onClick={() => handleChoice("rock")}>
+              Rock
+            </button>
+            <button className="btn" onClick={() => handleChoice("paper")}>
+              Paper
+            </button>
+            <button className="btn" onClick={() => handleChoice("scissors")}>
+              Scissors
+            </button>
+          </div>
+          {playerChoice && <p>Your choice: {playerChoice}</p>}
+          {opponentChoice && <p>Opponent's choice: {opponentChoice}</p>}
+          {winner && <p className="font-bold">{winner}</p>}
+        </>
       ) : (
-        roomCode && (
-          <>
-            <div className="mb-4">
-              <p className="font-bold">Room Code: {roomCode}</p>
-            </div>
-            <div className="flex justify-center space-x-4">
-              <button className="btn" onClick={() => handleChoice("rock")}>
-                Rock
-              </button>
-              <button className="btn" onClick={() => handleChoice("paper")}>
-                Paper
-              </button>
-              <button className="btn" onClick={() => handleChoice("scissors")}>
-                Scissors
-              </button>
-            </div>
-            {playerChoice && <p>Your choice: {playerChoice}</p>}
-            {opponentChoice && <p>Opponent's choice: {opponentChoice}</p>}
-            {winner && <p className="font-bold">{winner}</p>}
-          </>
-        )
+        <div>No active game. Please try again.</div>
       )}
+      <button
+        className="mt-4 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+        onClick={onBackToMainMenu}
+      >
+        Back to Main Menu
+      </button>
     </div>
+    </>
   );
 };
+
 
 export default Play;
