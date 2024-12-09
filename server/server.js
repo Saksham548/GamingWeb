@@ -1,4 +1,5 @@
-require("dotenv").config(); // Load .env file variables
+require("dotenv").config(); // Load environment variables
+
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
@@ -9,8 +10,20 @@ const mongoose = require("mongoose");
 const app = express();
 const server = http.createServer(app);
 
-// Enable CORS
-app.use(cors({ origin: process.env.FRONTEND_URL, credentials: true }));
+// Enable CORS with proper settings
+const allowedOrigins = ["https://game-hub-wheat-beta.vercel.app"];
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("CORS error: Origin not allowed"));
+      }
+    },
+    credentials: true,
+  })
+);
 
 // MongoDB connection
 mongoose
@@ -21,10 +34,16 @@ mongoose
   .then(() => console.log("Connected to MongoDB"))
   .catch((error) => console.log("MongoDB connection error:", error));
 
-// Initialize Socket.io
+// Initialize Socket.IO
 const io = new Server(server, {
   cors: {
-    origin: process.env.FRONTEND_URL,
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("CORS error: Origin not allowed"));
+      }
+    },
     methods: ["GET", "POST"],
     credentials: true,
   },
@@ -51,7 +70,7 @@ const generateRoomCode = () => {
 io.on("connection", (socket) => {
   console.log("New client connected:", socket.id);
 
-  // Handle creating a room for friends
+  // Create a room for friends
   socket.on("create_room_for_friends", async () => {
     const roomCode = generateRoomCode();
     const newSession = new GameSession({
@@ -66,7 +85,7 @@ io.on("connection", (socket) => {
     console.log(`Room created: ${roomCode}`);
   });
 
-  // Handle joining a matchmaking or room
+  // Join an existing room
   socket.on("join_room", async (roomCode) => {
     const session = await GameSession.findOne({ roomCode });
 
@@ -88,9 +107,10 @@ io.on("connection", (socket) => {
     const gameSession = await GameSession.findOne({ roomCode });
 
     if (gameSession) {
-      gameSession.choices[socket.id] = choice; // Save choice
+      gameSession.choices[socket.id] = choice;
+
       if (Object.keys(gameSession.choices).length === 2) {
-        // Both players made a choice, compute result
+        // Both players made choices, compute result
         const [player1Choice, player2Choice] = [
           gameSession.choices[gameSession.players[0]],
           gameSession.choices[gameSession.players[1]],
@@ -113,13 +133,21 @@ io.on("connection", (socket) => {
         gameSession.choices = {};
         gameSession.currentRound++;
         await gameSession.save();
+
+        // End game after 3 rounds
+        if (gameSession.currentRound > 3) {
+          io.to(roomCode).emit("game_over", {
+            scores: gameSession.scores,
+          });
+          await GameSession.deleteOne({ roomCode });
+        }
       }
     }
   });
 
   // Handle disconnect
   socket.on("disconnect", async () => {
-    console.log("Disconnected: ", socket.id);
+    console.log("Client disconnected:", socket.id);
 
     await GameSession.updateMany(
       { players: socket.id },
@@ -127,7 +155,6 @@ io.on("connection", (socket) => {
     );
 
     const activeSessions = await GameSession.find();
-
     activeSessions.forEach(async (session) => {
       if (session.players.length === 0) {
         await GameSession.deleteOne({ _id: session._id });
@@ -136,7 +163,7 @@ io.on("connection", (socket) => {
   });
 });
 
-// Helper function to determine winner
+// Helper function to determine the winner
 const determineWinner = (choice1, choice2) => {
   if (choice1 === choice2) return "tie";
   if (
