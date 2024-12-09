@@ -4,160 +4,148 @@ const { Server } = require("socket.io");
 const cors = require("cors");
 const mongoose = require("mongoose");
 
-// MongoDB setup
-mongoose.connect("mongodb+srv://Saksham1242:Saksham548@gamehub.kzg0z.mongodb.net/", {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-});
-
-const RoomSchema = new mongoose.Schema({
-  code: String,
-  players: [String], // Player Socket IDs
-  choices: Object, // Player choices (key: socket ID, value: choice)
-  status: String, // 'waiting', 'active', 'finished'
-});
-
-const Room = mongoose.model("Room", RoomSchema);
-
+// Initialize express server
 const app = express();
 const server = http.createServer(app);
 
-app.use(cors({
-  origin: "*", // Replace with frontend URL during production
-  methods: ["GET", "POST"],
-}));
+// Enable CORS
+app.use(cors({ origin: "http://your-frontend-url.com", credentials: true }));
 
+// MongoDB connection
+mongoose
+  .connect("mongodb+srv://Saksham1242:Saksham548@gamehub.kzg0z.mongodb.net/", {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+  })
+  .then(() => console.log("Connected to MongoDB"))
+  .catch((error) => console.log("MongoDB connection error:", error));
+
+// Initialize Socket.io
 const io = new Server(server, {
   cors: {
-    origin: "*", // Replace with frontend URL during production
+    origin: "http://your-frontend-url.com",
     methods: ["GET", "POST"],
+    credentials: true,
   },
 });
 
-const generateRoomCode = () => Math.random().toString(36).substring(2, 8).toUpperCase();
+// MongoDB Schema for room/session persistence
+const GameSessionSchema = new mongoose.Schema({
+  roomCode: String,
+  players: [String], // Array of Socket IDs
+  scores: { player1: { type: Number, default: 0 }, player2: { type: Number, default: 0 } },
+  currentRound: { type: Number, default: 1 },
+  createdAt: { type: Date, default: Date.now },
+  choices: {},
+});
 
+const GameSession = mongoose.model("GameSession", GameSessionSchema);
+
+// Function to generate a room code
+const generateRoomCode = () => {
+  return Math.random().toString(36).substring(2, 8).toUpperCase(); // Example: ABC123
+};
+
+// Socket connection logic
 io.on("connection", (socket) => {
   console.log("New client connected:", socket.id);
 
-  // Create a friends-only session
-  socket.on("create_room", async () => {
+  // Handle creating a room for friends
+  socket.on("create_room_for_friends", async () => {
     const roomCode = generateRoomCode();
-    const room = new Room({
-      code: roomCode,
+    const newSession = new GameSession({
+      roomCode,
       players: [socket.id],
-      choices: {},
-      status: "waiting",
     });
 
-    await room.save();
+    await newSession.save();
     socket.join(roomCode);
+
     socket.emit("room_created", roomCode);
     console.log(`Room created: ${roomCode}`);
   });
 
-  // Join a friends-only session
+  // Handle joining a matchmaking or room
   socket.on("join_room", async (roomCode) => {
-    const room = await Room.findOne({ code: roomCode });
+    const session = await GameSession.findOne({ roomCode });
 
-    if (room) {
-      if (room.players.length < 2) {
-        room.players.push(socket.id);
-        room.status = "active";
-        await room.save();
+    if (session && session.players.length < 2) {
+      session.players.push(socket.id);
+      await session.save();
 
-        socket.join(roomCode);
-        socket.emit("room_joined", roomCode);
-        io.to(roomCode).emit("game_start", roomCode);
-        console.log(`Player ${socket.id} joined room: ${roomCode}`);
-      } else {
-        socket.emit("error_message", "Room is full");
-      }
-    } else {
-      socket.emit("error_message", "Room does not exist");
-    }
-  });
-
-  // Join a global session
-  socket.on("join_global", async () => {
-    let room = await Room.findOne({ status: "waiting" });
-
-    if (!room) {
-      // Create a new room if no waiting room exists
-      const roomCode = generateRoomCode();
-      room = new Room({
-        code: roomCode,
-        players: [socket.id],
-        choices: {},
-        status: "waiting",
-      });
-      await room.save();
       socket.join(roomCode);
-      socket.emit("room_created", roomCode);
+      socket.emit("room_joined", roomCode);
+      io.to(roomCode).emit("start_game");
+      console.log(`Player joined room: ${roomCode}`);
     } else {
-      // Join an existing waiting room
-      room.players.push(socket.id);
-      room.status = "active";
-      await room.save();
-
-      socket.join(room.code);
-      io.to(room.code).emit("game_start", room.code);
+      socket.emit("error_message", "Room is full or doesn't exist");
     }
   });
 
-  // Handle player choices
-  socket.on("make_choice", async ({ roomCode, choice }) => {
-    const room = await Room.findOne({ code: roomCode });
+  // Handle making choices
+  socket.on("make_choice", async ({ choice, roomCode }) => {
+    const gameSession = await GameSession.findOne({ roomCode });
 
-    if (room) {
-      room.choices[socket.id] = choice;
+    if (gameSession) {
+      gameSession.choices[socket.id] = choice; // Save choice
+      if (Object.keys(gameSession.choices).length === 2) {
+        // Both players made a choice, compute result
+        const [player1Choice, player2Choice] = [
+          gameSession.choices[gameSession.players[0]],
+          gameSession.choices[gameSession.players[1]],
+        ];
+        const result = determineWinner(player1Choice, player2Choice);
 
-      if (Object.keys(room.choices).length === 2) {
-        const [player1, player2] = room.players;
-        const result = determineWinner(room.choices[player1], room.choices[player2]);
+        if (result === "player1") {
+          gameSession.scores.player1++;
+        } else if (result === "player2") {
+          gameSession.scores.player2++;
+        }
 
+        await gameSession.save();
         io.to(roomCode).emit("round_result", {
-          choices: room.choices,
           result,
+          scores: gameSession.scores,
         });
 
-        room.choices = {}; // Reset choices for the next round
-        await room.save();
+        // Reset choices for next round
+        gameSession.choices = {};
+        gameSession.currentRound++;
+        await gameSession.save();
       }
     }
   });
 
+  // Handle disconnect
   socket.on("disconnect", async () => {
-    console.log("Client disconnected:", socket.id);
+    console.log("Disconnected: ", socket.id);
 
-    // Remove player from room and cleanup if necessary
-    const room = await Room.findOne({ players: socket.id });
+    await GameSession.updateMany(
+      { players: socket.id },
+      { $pull: { players: socket.id } }
+    );
 
-    if (room) {
-      room.players = room.players.filter((id) => id !== socket.id);
-      if (room.players.length === 0) {
-        await Room.deleteOne({ code: room.code });
-      } else {
-        room.status = "waiting";
-        await room.save();
+    const activeSessions = await GameSession.find();
+
+    activeSessions.forEach(async (session) => {
+      if (session.players.length === 0) {
+        await GameSession.deleteOne({ _id: session._id });
       }
-    }
+    });
   });
+});
 
-  function determineWinner(choice1, choice2) {
-    if (choice1 === choice2) return "tie";
-    if (
-      (choice1 === "rock" && choice2 === "scissors") ||
-      (choice1 === "paper" && choice2 === "rock") ||
-      (choice1 === "scissors" && choice2 === "paper")
-      
-    ) {
-      return "player1";
-    }
-    return "player2";
+// Helper function to determine winner
+const determineWinner = (choice1, choice2) => {
+  if (choice1 === choice2) return "tie";
+  if (
+    (choice1 === "rock" && choice2 === "scissors") ||
+    (choice1 === "paper" && choice2 === "rock") ||
+    (choice1 === "scissors" && choice2 === "paper")
+  ) {
+    return "player1";
   }
-});
+  return "player2";
+};
 
-const PORT = 3000;
-server.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
-});
+server.listen(3000, () => console.log("Server running on port 3000"));

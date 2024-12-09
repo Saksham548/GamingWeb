@@ -1,22 +1,21 @@
 import React, { useState, useEffect } from "react";
 import io from "socket.io-client";
 import { Toaster, toast } from "react-hot-toast";
-import Header from "./header";
+import Header from "./header"; // Updated header component
 const Play = ({ gameMode, onBackToMainMenu }) => {
   const [playerChoice, setPlayerChoice] = useState(null);
   const [opponentChoice, setOpponentChoice] = useState(null);
   const [winner, setWinner] = useState("");
-  const [roomCode, setRoomCode] = useState("");
   const [loading, setLoading] = useState(false);
+  const [roomCode, setRoomCode] = useState("");
   const [socket, setSocket] = useState(null);
+  const [score, setScore] = useState({ player1: 0, player2: 0 }); // Added state for score tracking
 
   useEffect(() => {
-    const newSocket = io("http://your-backend-url.com", { withCredentials: true }); // Replace with deployed backend URL
+    const newSocket = io("http://your-backend-url.com", { withCredentials: true });
     setSocket(newSocket);
 
-    newSocket.on("connect", () => {
-      console.log("Socket connected:", newSocket.id);
-    });
+    newSocket.on("connect", () => console.log("Socket connected"));
 
     newSocket.on("room_created", (code) => {
       setRoomCode(code);
@@ -30,10 +29,6 @@ const Play = ({ gameMode, onBackToMainMenu }) => {
       toast.success("Joined room successfully!");
     });
 
-    newSocket.on("game_start", () => {
-      toast.success("Game started!");
-    });
-
     newSocket.on("round_result", (data) => {
       setOpponentChoice(data.opponentChoice);
       setWinner(
@@ -43,11 +38,12 @@ const Play = ({ gameMode, onBackToMainMenu }) => {
           ? "You lose!"
           : "It's a tie!"
       );
+      setScore(data.scores); // Update scores from server
     });
 
     newSocket.on("error_message", (message) => {
-      setLoading(false);
       toast.error(message);
+      setLoading(false);
     });
 
     newSocket.on("disconnect", () => {
@@ -60,6 +56,7 @@ const Play = ({ gameMode, onBackToMainMenu }) => {
   const joinOrCreateRoom = () => {
     if (socket) {
       setLoading(true);
+
       if (gameMode === "new_game") {
         socket.emit("join_or_create_room", {}, (response) => {
           if (response.success) {
@@ -86,12 +83,6 @@ const Play = ({ gameMode, onBackToMainMenu }) => {
     }
   };
 
-  useEffect(() => {
-    if (gameMode) {
-      joinOrCreateRoom();
-    }
-  }, [gameMode]);
-
   const handleChoice = (choice) => {
     setPlayerChoice(choice);
     if (socket && roomCode) {
@@ -100,10 +91,11 @@ const Play = ({ gameMode, onBackToMainMenu }) => {
   };
 
   return (
-    <>
-      <Header/>
+  <>
+          <Header score={score} /> {/* Display updated score */}
     <div className="text-center">
       <Toaster />
+      <h2 className="text-2xl font-bold mb-4">Rock Paper Scissors</h2>
       {loading ? (
         <div>Loading...</div>
       ) : roomCode ? (
@@ -139,6 +131,5 @@ const Play = ({ gameMode, onBackToMainMenu }) => {
     </>
   );
 };
-
 
 export default Play;
