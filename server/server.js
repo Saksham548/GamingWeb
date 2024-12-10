@@ -10,11 +10,11 @@ const app = express();
 const server = http.createServer(app);
 
 // Enable CORS with proper settings
-app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "https://game-hub-wheat-beta.vercel.app");
-  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
-  next();
-});
+app.use(cors({
+  origin: "https://game-hub-wheat-beta.vercel.app",
+  methods: ["GET", "POST"],
+  credentials: true,
+}));
 
 // MongoDB connection
 mongoose
@@ -28,7 +28,7 @@ mongoose
 // Initialize Socket.IO
 const io = new Server(server, {
   cors: {
-    origin: "*", // Your frontend's origin
+    origin: "https://game-hub-wheat-beta.vercel.app",
     methods: ["GET", "POST"],
     credentials: true, // Allows cookies to work properly
   },
