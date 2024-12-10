@@ -10,19 +10,11 @@ const app = express();
 const server = http.createServer(app);
 
 // Enable CORS with proper settings
-const allowedOrigins = ["https://game-hub-wheat-beta.vercel.app"];
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error("CORS error: Origin not allowed"));
-      }
-    },
-    credentials: true,
-  })
-);
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "https://game-hub-wheat-beta.vercel.app");
+  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+  next();
+});
 
 // MongoDB connection
 mongoose
@@ -36,15 +28,9 @@ mongoose
 // Initialize Socket.IO
 const io = new Server(server, {
   cors: {
-    origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error("CORS error: Origin not allowed"));
-      }
-    },
+    origin: "*", // Your frontend's origin
     methods: ["GET", "POST"],
-    credentials: true,
+    credentials: true, // Allows cookies to work properly
   },
 });
 

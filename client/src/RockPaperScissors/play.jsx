@@ -65,6 +65,7 @@ const Play = ({ onBackToMainMenu }) => {
       onBackToMainMenu();
     });
 
+    // Cleanup on component unmount
     return () => {
       newSocket.disconnect();
     };
@@ -186,16 +187,6 @@ const Play = ({ onBackToMainMenu }) => {
           </div>
         </div>
       )}
-
-      {/* Back to menu */}
-      <div className="mt-8">
-        <button
-          className="mt-4 bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded"
-          onClick={onBackToMainMenu}
-        >
-          Back to Main Menu
-        </button>
-      </div>
     </div>
   );
 };
