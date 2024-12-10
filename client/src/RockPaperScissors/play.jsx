@@ -14,7 +14,7 @@ const Play = ({ onBackToMainMenu }) => {
 
   useEffect(() => {
     // Establish the socket connection
-    const newSocket = io("https://proxy-server-ts7c.onrender.com", {
+    const newSocket = io("https://gamehub-uoab.onrender.com", {
       withCredentials: true,
     });
     setSocket(newSocket);
