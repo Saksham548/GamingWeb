@@ -8,66 +8,71 @@ const Play = ({ onBackToMainMenu }) => {
   const [winner, setWinner] = useState("");
   const [loading, setLoading] = useState(false);
   const [roomCode, setRoomCode] = useState("");
-  const [customRoomCode, setCustomRoomCode] = useState(""); // For entering custom room code
+  const [customRoomCode, setCustomRoomCode] = useState("");
   const [socket, setSocket] = useState(null);
   const [score, setScore] = useState({ player1: 0, player2: 0 });
+  const [waitingForOpponent, setWaitingForOpponent] = useState(false);
 
   useEffect(() => {
-    // Establish the socket connection
     const newSocket = io("https://gamehub-uoab.onrender.com", {
       withCredentials: true,
     });
     setSocket(newSocket);
 
-    // Handle connection
     newSocket.on("connect", () => console.log("Socket connected"));
 
-    // Handle successful room creation
     newSocket.on("room_created", (code) => {
       setRoomCode(code);
       setLoading(false);
       toast.success(`Room successfully created with code: ${code}`);
     });
 
-    // Handle joining room
     newSocket.on("room_joined", (code) => {
       setRoomCode(code);
       setLoading(false);
       toast.success("You joined the game session successfully!");
     });
 
-    // Handle errors
     newSocket.on("error_message", (message) => {
       toast.error(message);
       setLoading(false);
     });
 
-    // Handle round results
     newSocket.on("round_result", (data) => {
       setOpponentChoice(data.opponentChoice || "Unknown");
       setWinner(
         data.result === "tie"
           ? "It's a tie!"
           : data.result === "player1"
-          ? "You win!"
-          : "You lose!"
+          ? "You win this round!"
+          : "Opponent wins this round!"
       );
       setScore(data.scores);
+      setWaitingForOpponent(false); // Reset the waiting state
+
+      toast.success(
+        data.result === "tie"
+          ? "It's a tie!"
+          : data.result === "player1"
+          ? "You win this round!"
+          : "Opponent wins this round!"
+      );
     });
 
-    // Handle game over scenario
     newSocket.on("game_over", (data) => {
-      toast(
-        `Game Over! Final Scores - Player 1: ${data.scores.player1}, Player 2: ${data.scores.player2}`
-      );
+      if (data.scores.player1 > data.scores.player2) {
+        toast.success("Congratulations! You win the game!");
+      } else {
+        toast.error("Game Over! Opponent wins the game.");
+      }
       setRoomCode("");
       setScore({ player1: 0, player2: 0 });
       onBackToMainMenu();
     });
 
-    // Cleanup on component unmount
     return () => {
       newSocket.disconnect();
+      console.log("disconnected");
     };
   }, [onBackToMainMenu]);
 
@@ -87,6 +92,7 @@ const Play = ({ onBackToMainMenu }) => {
 
   const handleChoice = (choice) => {
     setPlayerChoice(choice);
+    setWaitingForOpponent(true); // Set to waiting state
     if (socket && roomCode) {
       socket.emit("make_choice", { choice, roomCode });
     } else {
@@ -108,7 +114,6 @@ const Play = ({ onBackToMainMenu }) => {
       <Toaster />
       <h2 className="text-3xl font-bold mb-4">Rock Paper Scissors</h2>
 
-      {/* Game session or waiting logic */}
       {loading ? (
         <div>Loading...</div>
       ) : roomCode ? (
@@ -137,14 +142,10 @@ const Play = ({ onBackToMainMenu }) => {
             </button>
           </div>
 
-          {/* Display user's choice */}
           {playerChoice && <p className="mt-4">Your choice: {playerChoice}</p>}
-          {/* Display opponent's choice */}
           {opponentChoice && <p>Opponent's choice: {opponentChoice}</p>}
-          {/* Display game round result */}
           {winner && <p className="font-bold text-lg">{winner}</p>}
 
-          {/* Scores Display */}
           <div className="mt-4">
             <h4 className="text-lg font-semibold">
               Your Score: {score.player1} | Opponent Score: {score.player2}
@@ -169,17 +170,16 @@ const Play = ({ onBackToMainMenu }) => {
             </button>
           </div>
 
-          {/* Custom Room Code Input */}
           <div className="mt-4">
             <input
               type="text"
-              className="border p-2"
-              placeholder="Enter Room Code"
+              placeholder="Enter room code"
+              className="border p-2 rounded"
               value={customRoomCode}
               onChange={(e) => setCustomRoomCode(e.target.value)}
             />
             <button
-              className="ml-2 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+              className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded ml-2"
               onClick={handleCustomRoomJoin}
             >
               Join Room
