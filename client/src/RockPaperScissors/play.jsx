@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import io from "socket.io-client";
 import { Toaster, toast } from "react-hot-toast";
+import Header from "./header";
 
 const Play = ({ onBackToMainMenu }) => {
   const [playerChoice, setPlayerChoice] = useState(null);
@@ -112,12 +113,17 @@ const Play = ({ onBackToMainMenu }) => {
   return (
     <div className="text-center p-6">
       <Toaster />
-      <h2 className="text-3xl font-bold mb-4">Rock Paper Scissors</h2>
+      <div className="text flex flex-col items-start uppercase text-[2.5rem] leading-[2rem] text-white font-bold">
+        <span>Rock</span>
+        <span>Paper</span>
+        <span>Scissors</span>
+      </div>
 
       {loading ? (
         <div>Loading...</div>
       ) : roomCode ? (
         <>
+        <Header/>
           <div className="mb-4">
             <p className="font-bold">Room Code: {roomCode}</p>
           </div>
@@ -157,13 +163,13 @@ const Play = ({ onBackToMainMenu }) => {
           <p>No active game found. Join an existing game or create one:</p>
           <div className="flex justify-center mt-4 space-x-4">
             <button
-              className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded"
+className="text-white mt-5 bg-gradient-to-r w-fit from-cyan-400 h-fit via-cyan-500 to-cyan-600 hover:bg-gradient-to-br focus:ring-4 focus:outline-none focus:ring-cyan-300 dark:focus:ring-cyan-800 font-medium rounded-lg text-sm px-5 py-2.5 text-center me-2 mb-2"
               onClick={joinOrCreateRoom}
             >
               Join or Create Game
             </button>
             <button
-              className="bg-yellow-500 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded"
+              className="text-white mt-5 bg-gradient-to-r w-fit from-cyan-400 h-fit via-cyan-500 to-cyan-600 hover:bg-gradient-to-br focus:ring-4 focus:outline-none focus:ring-cyan-300 dark:focus:ring-cyan-800 font-medium rounded-lg text-sm px-5 py-2.5 text-center me-2 mb-2"
               onClick={createRoomForFriends}
             >
               Create Room for Friends
