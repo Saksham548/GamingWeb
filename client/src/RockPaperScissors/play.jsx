@@ -154,7 +154,7 @@ const Play = ({ onBackToMainMenu }) => {
           </p>
           <Header score={score} />
           <div className="mb-4"></div>
-          <div className="flex justify-center space-x-4 mb-4">
+          <div className="flex justify-center items-center space-x-4 mb-4">
             <button
               className="bg-blue-400 hover:bg-blue-500 text-white font-bold py-2 px-4 rounded"
               onClick={() => handleChoice("rock")}
@@ -194,6 +194,7 @@ const Play = ({ onBackToMainMenu }) => {
         </>
       ) : (
         <div>
+            <img src="./game.png" height={150} width={150} className="float-right"></img>
           <div className="text flex flex-col items-start uppercase text-[2.5rem] leading-[2rem] text-white font-bold p-8 ">
             <span>Rock</span>
             <span>Paper</span>
