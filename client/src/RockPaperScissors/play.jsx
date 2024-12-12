@@ -194,7 +194,7 @@ const Play = ({ onBackToMainMenu }) => {
         </>
       ) : (
         <div>
-            <img src="./game.png" height={150} width={150} className="float-right"></img>
+            <img src="/game.png" height={150} width={150} className="float-right"></img>
           <div className="text flex flex-col items-start uppercase text-[2.5rem] leading-[2rem] text-white font-bold p-8 ">
             <span>Rock</span>
             <span>Paper</span>
@@ -217,7 +217,7 @@ const Play = ({ onBackToMainMenu }) => {
             </button>
           </div>
 
-          <div className="mt-4">
+          <div className="mt-4 ml-4">
             <input
               type="text"
               placeholder="Enter room code"
