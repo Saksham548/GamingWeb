@@ -10,11 +10,14 @@ const app = express();
 const server = http.createServer(app);
 
 // Enable CORS with proper settings
-app.use(cors({
-  origin: process.env.FRONTEND_URL,
-  methods: ["GET", "POST"],
-  credentials: true,
-}));
+app.use(
+  cors({
+    origin: process.env.FRONTEND_URL,
+    methods: ["GET", "POST"],
+    credentials: true,
+  })
+  
+);
 
 // MongoDB connection
 mongoose
@@ -38,7 +41,10 @@ const io = new Server(server, {
 const GameSessionSchema = new mongoose.Schema({
   roomCode: String,
   players: [String], // Array of Socket IDs
-  scores: { player1: { type: Number, default: 0 }, player2: { type: Number, default: 0 } },
+  scores: {
+    player1: { type: Number, default: 0 },
+    player2: { type: Number, default: 0 },
+  },
   createdAt: { type: Date, default: Date.now },
   currentRound: { type: Number, default: 1 },
   choices: { type: Object, default: {} }, // Ensure choices starts as an empty object
@@ -74,7 +80,7 @@ io.on("connection", (socket) => {
     const newSession = new GameSession({
       roomCode,
       players: [socket.id],
-      choices: {}  // Ensure choices are initialized
+      choices: {}, // Ensure choices are initialized
     });
 
     await newSession.save();
@@ -148,7 +154,9 @@ io.on("connection", (socket) => {
         io.to(roomCode).emit("round_result", {
           result,
           opponentChoice:
-            socket.id === gameSession.players[0] ? player2Choice : player1Choice,
+            socket.id === gameSession.players[0]
+              ? player2Choice
+              : player1Choice,
           scores: gameSession.scores,
         });
 
@@ -176,6 +184,8 @@ io.on("connection", (socket) => {
   });
 });
 
+
+
 // Start the server
 const PORT = process.env.PORT || 10000;
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+server.listen(PORT, () => console.log(process.env.FRONTEND_URL));
